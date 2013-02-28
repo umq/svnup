@@ -36,7 +36,11 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#ifdef OPENSSL
+#include <openssl/md5.h>
+#else
 #include <md5.h>
+#endif
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,6 +50,10 @@
 #define BUFFER_UNIT 4096
 #define COMMAND_BUFFER 32768
 #define COMMAND_BUFFER_THRESHOLD 32000
+#ifdef OPENSSL
+#define MD5Init MD5_Init
+#define MD5Update MD5_Update
+#endif
 
 static char twirly[4] = { '|', '/', '-', '\\' };
 
@@ -83,6 +91,27 @@ void  process_file_attributes(connector *connection, char *command, node **file,
 void  build_source_directory_tree(connector *connection, char *command, node ***file, int *file_count, int *max_file, char *path_target, int revision);
 void  get_files(connector *connection, char *command, char *path_target, node **file, int file_start, int file_end, int revision);
 
+#ifdef OPENSSL
+char *
+MD5End(MD5_CTX *ctx, char *buf)
+{
+	int i;
+	unsigned char digest[MD5_DIGEST_LENGTH];
+	static const char hex[]="0123456789abcdef";
+
+	if (!buf)
+		buf = malloc(2*MD5_DIGEST_LENGTH + 1);
+	if (!buf)
+		return 0;
+	MD5_Final(digest, ctx);
+	for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
+		buf[i+i] = hex[digest[i] >> 4];
+		buf[i+i+1] = hex[digest[i] & 0x0f];
+	}
+	buf[i+i] = '\0';
+	return buf;
+}
+#endif
 
 /*
  * find_response_end
@@ -195,7 +224,7 @@ void prune(char *path_target) {
  */
 
 void send_command(char *command, connector *connection) {
-	int bytes_written, total_bytes_written, bytes_to_write;
+	size_t bytes_written, total_bytes_written, bytes_to_write;
 
 	if (command) {
 		total_bytes_written = 0;
@@ -437,7 +466,8 @@ void process_file_attributes(connector *connection, char *command, node **file, 
 void build_source_directory_tree(connector *connection, char *command, node ***file, int *file_count, int *max_file, char *path_target, int revision) {
 	char  *start, *end, *value, *directory, temp_file[BUFFER_UNIT], **local_file;
 	char  *new_path_target, **buffer, *path_source;
-	int    x, d, f, length;
+	int    x, d, f;
+	size_t length;
 	int    buffer_count, buffer_max, *buffer_command_count;
 	int    local_file_count, local_file_max, local_file_increment;
 	node  *this_file;
@@ -445,6 +475,7 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 	struct dirent  *de;
 	struct stat     sb;
 
+	local_file_count = 0;
 	local_file_max = 0;
 	local_file_increment = 2;
 	buffer_max = 1;
@@ -503,7 +534,6 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 		/* Find all files/directories in the corresponding local directory. */
 
 		if ((dp = opendir(new_path_target)) != NULL) {
-			local_file_count = 0;
 
 			while ((de = readdir(dp)) != NULL) {
 				if (strcmp(de->d_name, "." ) == 0) continue;
