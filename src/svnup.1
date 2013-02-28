@@ -1,0 +1,82 @@
+.\" Copyright (c) 2012, John Mehr <jcm@visi.com>
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+.\" SUCH DAMAGE.
+.\"
+.\" $FreeBSD$
+.\"
+.Dd December 30, 2012
+.Os FreeBSD
+.Dt svnup(1)
+.Sh NAME
+.Nm svnup
+.Nd A lightweight, dependency-free, BSD licensed program to pull source using the svn protocol.
+.Sh SYNOPSIS
+.Nm
+.Op Fl 46
+.Op Fl b Ar branch
+.Op Fl h Ar hostname/address
+.Op Fl l Ar local directory
+.Op Fl p Ar port
+.Op Fl r Ar revision
+.Op Fl v Ar verbosity
+.Sh DESCRIPTION
+.Nm
+is a minimalist program to create or synchronize a local copy of Subversion repository.  It is not intended to be a full-featured replacement for the devel/subversion port, but rather, is intended to provide a convenient way for users to update FreeBSD source files without having to install devel/subversion and all of its related dependencies.
+.Pp
+.Nm
+downloads only the files and directories that do not currently exist in the target directory tree or those whose MD5 checksums do not match.
+.Nm
+does not keep any state information locally (like the bulky .svn directory) resulting in a minimal usage of disk space.
+.Sh OPTIONS
+The following options are currently supported by 
+.Nm :
+.Bl -tag -width Fl
+.It Fl 4
+Use IPv4 addresses only.
+.It Fl 6
+Use IPv6 addresses only.
+.It Fl b
+The Subversion branch to retrieve.
+.It Fl h
+The hostname or IP address of the Subversion repository.
+.It Fl l
+The local directory to save the repository's files to.
+.It Fl p
+The port to connect to (defaults to 3690 if this option is not specified).
+.It Fl r
+The revision number to retreive (defaults to the branch's most recent revision if this option is not specified). 
+.It Fl v
+How verbose the output should be (0 = no output, 1 = the default normal output, 2 = also show command and response text, 3 = also show command response parsing codes).
+.El
+.Sh EXAMPLES
+To retrieve/checkout a copy of the most recent revision of the 9/stable branch and store the files in /usr/src/:
+.Pp
+.Dl "svnup -h svn0.us-west.freebsd.org -b base/stable/9 -l /usr/src"
+.Sh BUGS
+Because
+.Nm
+doesn't use the .svn folder that Subversion's svn client uses, you may experience difficulties using svn after using svnup in a given directory tree.
+.Sh AUTHORS
+John Mehr <jmehr@umn.edu> is the author of
+.Nm
+and this man page.
