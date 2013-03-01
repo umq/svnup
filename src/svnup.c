@@ -1013,7 +1013,7 @@ void get_files(connector *connection, char *command, char *path_target, node **f
  */
 
 void usage() {
-	fprintf(stderr, "Usage: svnup -h host -b branch -l local_directory\n");
+	fprintf(stderr, "Usage: svnup -h host -b branch\n");
 	fprintf(stderr, "  Options:\n");
 	fprintf(stderr, "    -4  Use IPv4 addresses only.\n");
 	fprintf(stderr, "    -6  Use IPv6 addresses only.\n");
@@ -1087,7 +1087,7 @@ int main(int argc, char **argv) {
 		if (strchr(branch, '/')) connection.branch = strchr(branch, '/') + 1;
 		}
 
-	if (path_target == NULL) usage();
+	if (path_target == NULL) path_target = getcwd(NULL, 1);
 
 	if (lstat(path_target, &local_directory) != -1) {
 		if (!S_ISDIR(local_directory.st_mode)) {
