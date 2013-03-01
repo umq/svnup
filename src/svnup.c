@@ -1146,6 +1146,9 @@ int main(int argc, char **argv) {
 
 	/* Login anonymously. */
 
+	if (strstr(connection.response, "ANONYMOUS") == NULL)
+		croak("Anonymous read is not allowed.");
+
 	connection.response_groups = 2;
 	send_receive_command("( ANONYMOUS ( 0: ) )\n", &connection);
 
