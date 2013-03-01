@@ -92,9 +92,7 @@ void  build_source_directory_tree(connector *connection, char *command, node ***
 void  get_files(connector *connection, char *command, char *path_target, node **file, int file_start, int file_end, int revision);
 
 #ifdef OPENSSL
-char *
-MD5End(MD5_CTX *ctx, char *buf)
-{
+char *MD5End(MD5_CTX *ctx, char *buf)	{
 	int i;
 	unsigned char digest[MD5_DIGEST_LENGTH];
 	static const char hex[]="0123456789abcdef";
@@ -107,10 +105,10 @@ MD5End(MD5_CTX *ctx, char *buf)
 	for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
 		buf[i+i] = hex[digest[i] >> 4];
 		buf[i+i+1] = hex[digest[i] & 0x0f];
-	}
+		}
 	buf[i+i] = '\0';
 	return buf;
-}
+	}
 #endif
 
 /*
