@@ -112,52 +112,6 @@ char *MD5End(MD5_CTX *ctx, char *buf)	{
 #endif
 
 /*
- * find_response_end
- *
- * Function that counts opening and closing parenthesis of a command's response in
- * order to find the end of the response.
- *
- */
-
-char *find_response_end(char *start, char *end) {
-	int count = 0;
-	do {
-		count += (*start == '(' ? 1 : (*start == ')' ? -1 : 0));
-		}
-	while ((*start != '\0') && (start++ < end) && (count > 0));
-
-	return (start);
-	}
-
-
-/*
- * terminate_response
- *
- * Function that puts a null character at the end of a command's response.
- *
- */
-
-char *terminate_response(char *start, char *end) {
-	start = find_response_end(start, end);
-	*start = '\0';
-
-	return (start);
-	}
-
-
-/*
- * croak
- *
- * Procedure that exits when an error has been detected.
- *
- */
-
-void croak(char *error) {
-	perror(error);
-	exit(EXIT_FAILURE);
-	}
-
-/*
  * prune
  *
  * Procedure that recursively removes the file or directory tree passed in.
@@ -211,6 +165,52 @@ void prune(char *path_target) {
 	printf(" - %s\n", path_target);
 
 	free(temp_file);
+	}
+
+/*
+ * find_response_end
+ *
+ * Function that counts opening and closing parenthesis of a command's response in
+ * order to find the end of the response.
+ *
+ */
+
+char *find_response_end(char *start, char *end) {
+	int count = 0;
+	do {
+		count += (*start == '(' ? 1 : (*start == ')' ? -1 : 0));
+		}
+	while ((*start != '\0') && (start++ < end) && (count > 0));
+
+	return (start);
+	}
+
+
+/*
+ * terminate_response
+ *
+ * Function that puts a null character at the end of a command's response.
+ *
+ */
+
+char *terminate_response(char *start, char *end) {
+	start = find_response_end(start, end);
+	*start = '\0';
+
+	return (start);
+	}
+
+
+/*
+ * croak
+ *
+ * Procedure that exits when an error has been detected.
+ *
+ */
+
+void croak(char *error) {
+	perror(error);
+	exit(EXIT_FAILURE);
 	}
 
 
@@ -351,105 +351,6 @@ char *send_receive_command(char *command, connector *connection) {
 		fprintf(stdout, "==========\n>> Response:\n%s", connection->response);
 
 	return (connection->response);
-	}
-
-
-/*
- * process_file_attributes
- *
- * Procedure that parses a get-file command response and extracts the MD5 checksum,
- * last author, committed revision number and committed date.
- */
-
-void process_file_attributes(connector *connection, char *command, node **file, int file_start, int file_end) {
-	char *start, *end, *temp, *md5;
-	char *last_author,    *last_author_end;
-	char *committed_rev,  *committed_rev_end;
-	char *committed_date, *committed_date_end;
-	int   s, revision_tag_length;
-
-	connection->response_groups = 2 * (file_end - file_start + 1);
-
-	start = send_receive_command(command, connection);
-
-	for (s = file_start; s <= file_end; s++) {
-		if (file[s] == NULL) continue;
-
-		if (connection->verbosity)
-			fprintf(stderr, "\e[2K ? %s/%s\r", file[s]->path, file[s]->name);
-
-		start = check_command_success(start, connection->response + connection->response_length);
-		end = terminate_response(start, connection->response + connection->response_length);
-
-		last_author    = last_author_end    = NULL;
-		committed_rev  = committed_rev_end  = NULL;
-		committed_date = committed_date_end = NULL;
-
-		/* Extract the file attributes. */
-
-		if ((start = strchr(start, ':')) != NULL) {
-			md5 = ++start;
-			start = strchr(start, ' ');
-			*start++ = '\0';
-
-			file[s]->revision_tag = NULL;
-			snprintf(file[s]->md5, 33, "%s", md5);
-			file[s]->executable = (strstr(start, "14:svn:executable") ? 1 : 0);
-
-			if ((temp = strstr(start, "last-author ")) != NULL) {
-				last_author     = strchr(temp, ':') + 1;
-				last_author_end = strchr(last_author, ' ');
-				}
-
-			if ((temp = strstr(start, "committed-rev ")) != NULL) {
-				committed_rev     = strchr(temp, ':') + 1;
-				committed_rev_end = strchr(committed_rev, ' ');
-				}
-
-			if ((temp = strstr(start, "committed-date ")) != NULL) {
-				committed_date = strchr(temp, ':') + 1;
-				temp = strchr(committed_date, 'T');
-				*temp++ = ' ';
-				temp = strchr(committed_date, '.');
-				*temp++ = 'Z';
-				committed_date_end = temp;
-				}
-
-			if (strstr(start, "( 12:svn:keywords 10:FreeBSD=%H ) ") != NULL) {
-				if ((last_author) && (committed_rev) && (committed_date)) {
-					*last_author_end    = '\0';
-					*committed_rev_end  = '\0';
-					*committed_date_end = '\0';
-
-					revision_tag_length = 8
-						+ strlen(connection->branch)
-						+ strlen(file[s]->path)
-						+ strlen(file[s]->name)
-						+ strlen(committed_rev)
-						+ strlen(committed_date)
-						+ strlen(last_author);
-
-					if ((file[s]->revision_tag = (char *)malloc(revision_tag_length)) == NULL)
-						croak("process_file_attributes revision_tag malloc");
-
-					snprintf(file[s]->revision_tag,
-						revision_tag_length,
-						": %s%s/%s %s %s %s ",
-						connection->branch,
-						file[s]->path,
-						file[s]->name,
-						committed_rev,
-						committed_date,
-						last_author
-						);
-					}
-				}
-			}
-
-		start = end + 1;
-		}
-
-	if (connection->verbosity) fprintf(stdout, "\r\e[2K\r");
 	}
 
 
@@ -747,6 +648,105 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 
 	free(buffer_command_count);
 	free(buffer);
+	}
+
+
+/*
+ * process_file_attributes
+ *
+ * Procedure that parses a get-file command response and extracts the MD5 checksum,
+ * last author, committed revision number and committed date.
+ */
+
+void process_file_attributes(connector *connection, char *command, node **file, int file_start, int file_end) {
+	char *start, *end, *temp, *md5;
+	char *last_author,    *last_author_end;
+	char *committed_rev,  *committed_rev_end;
+	char *committed_date, *committed_date_end;
+	int   s, revision_tag_length;
+
+	connection->response_groups = 2 * (file_end - file_start + 1);
+
+	start = send_receive_command(command, connection);
+
+	for (s = file_start; s <= file_end; s++) {
+		if (file[s] == NULL) continue;
+
+		if (connection->verbosity)
+			fprintf(stderr, "\e[2K ? %s/%s\r", file[s]->path, file[s]->name);
+
+		start = check_command_success(start, connection->response + connection->response_length);
+		end = terminate_response(start, connection->response + connection->response_length);
+
+		last_author    = last_author_end    = NULL;
+		committed_rev  = committed_rev_end  = NULL;
+		committed_date = committed_date_end = NULL;
+
+		/* Extract the file attributes. */
+
+		if ((start = strchr(start, ':')) != NULL) {
+			md5 = ++start;
+			start = strchr(start, ' ');
+			*start++ = '\0';
+
+			file[s]->revision_tag = NULL;
+			snprintf(file[s]->md5, 33, "%s", md5);
+			file[s]->executable = (strstr(start, "14:svn:executable") ? 1 : 0);
+
+			if ((temp = strstr(start, "last-author ")) != NULL) {
+				last_author     = strchr(temp, ':') + 1;
+				last_author_end = strchr(last_author, ' ');
+				}
+
+			if ((temp = strstr(start, "committed-rev ")) != NULL) {
+				committed_rev     = strchr(temp, ':') + 1;
+				committed_rev_end = strchr(committed_rev, ' ');
+				}
+
+			if ((temp = strstr(start, "committed-date ")) != NULL) {
+				committed_date = strchr(temp, ':') + 1;
+				temp = strchr(committed_date, 'T');
+				*temp++ = ' ';
+				temp = strchr(committed_date, '.');
+				*temp++ = 'Z';
+				committed_date_end = temp;
+				}
+
+			if (strstr(start, "( 12:svn:keywords 10:FreeBSD=%H ) ") != NULL) {
+				if ((last_author) && (committed_rev) && (committed_date)) {
+					*last_author_end    = '\0';
+					*committed_rev_end  = '\0';
+					*committed_date_end = '\0';
+
+					revision_tag_length = 8
+						+ strlen(connection->branch)
+						+ strlen(file[s]->path)
+						+ strlen(file[s]->name)
+						+ strlen(committed_rev)
+						+ strlen(committed_date)
+						+ strlen(last_author);
+
+					if ((file[s]->revision_tag = (char *)malloc(revision_tag_length)) == NULL)
+						croak("process_file_attributes revision_tag malloc");
+
+					snprintf(file[s]->revision_tag,
+						revision_tag_length,
+						": %s%s/%s %s %s %s ",
+						connection->branch,
+						file[s]->path,
+						file[s]->name,
+						committed_rev,
+						committed_date,
+						last_author
+						);
+					}
+				}
+			}
+
+		start = end + 1;
+		}
+
+	if (connection->verbosity) fprintf(stdout, "\r\e[2K\r");
 	}
 
 
