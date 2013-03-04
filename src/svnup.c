@@ -2,6 +2,8 @@
  * Copyright (c) 2012, John Mehr <jcm@visi.com>
  * All rights reserved.
  *
+ * Special thanks to Rudolf Cejka <cejkar@fit.vutbr.cz>
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -27,6 +29,7 @@
  *
  */
 
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 
@@ -50,13 +53,13 @@
 static char twirly[4] = { '|', '/', '-', '\\' };
 
 typedef struct {
-	int     socket_descriptor;
-	char   *response;
-	size_t  response_length;
-	int     response_blocks;
-	int     response_groups;
-	char   *branch;
-	int     verbosity;
+	int            socket_descriptor;
+	char          *response;
+	size_t         response_length;
+	unsigned int   response_blocks;
+	unsigned int   response_groups;
+	char          *branch;
+	int            verbosity;
 	} connector;
 
 typedef struct {
@@ -75,60 +78,15 @@ typedef struct {
 char *find_response_end(char *start, char *end);
 char *terminate_response(char *start, char *end);
 void  prune(char *path_target);
-void  send_command(char *command, connector *connection);
-char *check_command_success(char *start, char *end);
-char *send_receive_command(char *command, connector *connection);
+void  send_command(const char *command, connector *connection);
+char *svn_check_command_success(char *start, char *end);
+char *send_receive_command(const char *command, connector *connection);
 int   compare_md5(node *source, char *path_target);
-void  process_file_attributes(connector *connection, char *command, node **file, int file_start, int file_end);
+void  process_file_attributes(connector *connection, char *command, node **file, int file_start, int file_end, char *path_target);
 void  build_source_directory_tree(connector *connection, char *command, node ***file, int *file_count, int *max_file, char *path_target, int revision);
 void  get_files(connector *connection, char *command, char *path_target, node **file, int file_start, int file_end, int revision);
-
-
-/*
- * find_response_end
- *
- * Function that counts opening and closing parenthesis of a command's response in
- * order to find the end of the response.
- *
- */
-
-char *find_response_end(char *start, char *end) {
-	int count = 0;
-	do {
-		count += (*start == '(' ? 1 : (*start == ')' ? -1 : 0));
-		}
-	while ((*start != '\0') && (start++ < end) && (count > 0));
-
-	return (start);
-	}
-
-
-/*
- * terminate_response
- *
- * Function that puts a null character at the end of a command's response.
- *
- */
-
-char *terminate_response(char *start, char *end) {
-	start = find_response_end(start, end);
-	*start = '\0';
-
-	return (start);
-	}
-
-
-/*
- * croak
- *
- * Procedure that exits when an error has been detected.
- *
- */
-
-void croak(char *error) {
-	perror(error);
-	exit(EXIT_FAILURE);
-	}
+void  croak(const char *error);
+void usage(void);
 
 /*
  * prune
@@ -139,7 +97,7 @@ void croak(char *error) {
 
 void prune(char *path_target) {
 	char           *temp_file;
-	unsigned long   temp_length;
+	unsigned int    temp_length;
 	DIR            *dp;
 	struct stat     sb;
 	struct dirent  *de;
@@ -188,13 +146,60 @@ void prune(char *path_target) {
 
 
 /*
+ * find_response_end
+ *
+ * Function that counts opening and closing parenthesis of a command's response in
+ * order to find the end of the response.
+ *
+ */
+
+char *find_response_end(char *start, char *end) {
+	int count = 0;
+	do {
+		count += (*start == '(' ? 1 : (*start == ')' ? -1 : 0));
+		}
+	while ((*start != '\0') && (start++ < end) && (count > 0));
+
+	return (start);
+	}
+
+
+/*
+ * terminate_response
+ *
+ * Function that puts a null character at the end of a command's response.
+ *
+ */
+
+char *terminate_response(char *start, char *end) {
+	start = find_response_end(start, end);
+	*start = '\0';
+
+	return (start);
+	}
+
+
+/*
+ * croak
+ *
+ * Procedure that exits when an error has been detected.
+ *
+ */
+
+void croak(const char *error) {
+	perror(error);
+	exit(EXIT_FAILURE);
+	}
+
+
+/*
  * send_command
  *
  * Procedure that sends a command to the svn server.
  *
  */
 
-void send_command(char *command, connector *connection) {
+void send_command(const char *command, connector *connection) {
 	int bytes_written, total_bytes_written, bytes_to_write;
 
 	if (command) {
@@ -202,7 +207,7 @@ void send_command(char *command, connector *connection) {
 		bytes_to_write = strlen(command);
 
 		if (connection->verbosity > 1)
-			fprintf(stdout, "==========\n<< Command: (%zd bytes)\n%s", bytes_to_write, command);
+			fprintf(stdout, "==========\n<< Command: (%d bytes)\n%s", bytes_to_write, command);
 
 		while (total_bytes_written < bytes_to_write) {
 			bytes_written = -1;
@@ -220,16 +225,17 @@ void send_command(char *command, connector *connection) {
 
 
 /*
- * check_command_success
+ * svn_check_command_success
  *
  * Function that makes sure a failure response has not been sent from the svn server.
  *
  */
 
-char *check_command_success(char *start, char *end) {
+char *svn_check_command_success(char *start, char *end) {
 	char *check;
 	int   ok = 1;
 
+	if (start[0] == '\n') start++;
 	if (strstr(start, "( success ( ( ) 0: ) ) ( failure") == start) ok = 0;
 	if (strstr(start, "( success ( ) ) ( failure") == start) ok = 0;
 
@@ -256,9 +262,10 @@ char *check_command_success(char *start, char *end) {
  *
  */
 
-char *send_receive_command(char *command, connector *connection) {
-	int   bytes_read, ok, count, group, position;
-	char  input[BUFFER_UNIT + 1], *check;
+char *send_receive_command(const char *command, connector *connection) {
+	int           bytes_read, ok, count, position;
+	unsigned int  group;
+	char          input[BUFFER_UNIT + 1], *check;
 
 	send_command(command, connection);
 
@@ -328,105 +335,6 @@ char *send_receive_command(char *command, connector *connection) {
 
 
 /*
- * process_file_attributes
- *
- * Procedure that parses a get-file command response and extracts the MD5 checksum,
- * last author, committed revision number and committed date.
- */
-
-void process_file_attributes(connector *connection, char *command, node **file, int file_start, int file_end) {
-	char *start, *end, *temp, *md5;
-	char *last_author,    *last_author_end;
-	char *committed_rev,  *committed_rev_end;
-	char *committed_date, *committed_date_end;
-	int   s, revision_tag_length;
-
-	connection->response_groups = 2 * (file_end - file_start + 1);
-
-	start = send_receive_command(command, connection);
-
-	for (s = file_start; s <= file_end; s++) {
-		if (file[s] == NULL) continue;
-
-		if (connection->verbosity)
-			fprintf(stderr, "\e[2K ? %s/%s\r", file[s]->path, file[s]->name);
-
-		start = check_command_success(start, connection->response + connection->response_length);
-		end = terminate_response(start, connection->response + connection->response_length);
-
-		last_author    = last_author_end    = NULL;
-		committed_rev  = committed_rev_end  = NULL;
-		committed_date = committed_date_end = NULL;
-
-		/* Extract the file attributes. */
-
-		if ((start = strchr(start, ':')) != NULL) {
-			md5 = ++start;
-			start = strchr(start, ' ');
-			*start++ = '\0';
-
-			file[s]->revision_tag = NULL;
-			snprintf(file[s]->md5, 33, "%s", md5);
-			file[s]->executable = (strstr(start, "14:svn:executable") ? 1 : 0);
-
-			if ((temp = strstr(start, "last-author ")) != NULL) {
-				last_author     = strchr(temp, ':') + 1;
-				last_author_end = strchr(last_author, ' ');
-				}
-
-			if ((temp = strstr(start, "committed-rev ")) != NULL) {
-				committed_rev     = strchr(temp, ':') + 1;
-				committed_rev_end = strchr(committed_rev, ' ');
-				}
-
-			if ((temp = strstr(start, "committed-date ")) != NULL) {
-				committed_date = strchr(temp, ':') + 1;
-				temp = strchr(committed_date, 'T');
-				*temp++ = ' ';
-				temp = strchr(committed_date, '.');
-				*temp++ = 'Z';
-				committed_date_end = temp;
-				}
-
-			if (strstr(start, "( 12:svn:keywords 10:FreeBSD=%H ) ") != NULL) {
-				if ((last_author) && (committed_rev) && (committed_date)) {
-					*last_author_end    = '\0';
-					*committed_rev_end  = '\0';
-					*committed_date_end = '\0';
-
-					revision_tag_length = 8
-						+ strlen(connection->branch)
-						+ strlen(file[s]->path)
-						+ strlen(file[s]->name)
-						+ strlen(committed_rev)
-						+ strlen(committed_date)
-						+ strlen(last_author);
-
-					if ((file[s]->revision_tag = (char *)malloc(revision_tag_length)) == NULL)
-						croak("process_file_attributes revision_tag malloc");
-
-					snprintf(file[s]->revision_tag,
-						revision_tag_length,
-						": %s%s/%s %s %s %s ",
-						connection->branch,
-						file[s]->path,
-						file[s]->name,
-						committed_rev,
-						committed_date,
-						last_author
-						);
-					}
-				}
-			}
-
-		start = end + 1;
-		}
-
-	if (connection->verbosity) fprintf(stdout, "\r\e[2K\r");
-	}
-
-
-/*
  * build_source_directory_tree
  *
  * Procedure that traverses a repository's directory structure, building a set of
@@ -436,19 +344,20 @@ void process_file_attributes(connector *connection, char *command, node **file, 
 
 void build_source_directory_tree(connector *connection, char *command, node ***file, int *file_count, int *max_file, char *path_target, int revision) {
 	char  *start, *end, *value, *directory, temp_file[BUFFER_UNIT], **local_file;
-	char  *new_path_target, **buffer, *path_source;
-	int    x, d, f, length;
-	int    buffer_count, buffer_max, *buffer_command_count;
-	int    local_file_count, local_file_max, local_file_increment;
+	char  *new_path_target, **buffer, *path_source, *columns, line[BUFFER_UNIT];
+	int    x, f, buffer_count, buffer_max, *buffer_command_count;
+	int    local_file_count, local_file_max, local_file_increment, termwidth;
 	node  *this_file;
 	DIR            *dp;
 	struct dirent  *de;
 	struct stat     sb;
+	struct winsize  win;
+	unsigned int    d, length;
 
-	local_file_max = 0;
+	termwidth = -1;
+	local_file_max = local_file_count = buffer_count = 0;
 	local_file_increment = 2;
 	buffer_max = 1;
-	buffer_count = 0;
 
 	if ((local_file = (char **)malloc(sizeof(char **) * local_file_max)) == NULL)
 		croak("build_source_directory_tree local_file malloc");
@@ -497,8 +406,23 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 
 		snprintf(new_path_target, length, "%s%s", path_target, path_source);
 
-		if (connection->verbosity)
-			fprintf(stderr, "\e[2K ? %s\r", new_path_target);
+		if (connection->verbosity) {
+			if (isatty(STDERR_FILENO)) {
+				if (((columns = getenv("COLUMNS")) != NULL) && (*columns != '\0'))
+					termwidth = strtol(columns, (char **)NULL, 10);
+				else {
+					if ((ioctl(STDERR_FILENO, TIOCGWINSZ, &win) != -1) && (win.ws_col > 0))
+						termwidth = win.ws_col;
+					}
+				}
+
+			snprintf(line, BUFFER_UNIT, " d %s", new_path_target);
+
+			if ((termwidth == -1) || (strlen(line) < (unsigned int)termwidth))
+				fprintf(stderr, "\e[2K%s\r", line);
+			else
+				fprintf(stderr, "\e[2K%.*s...\r", termwidth - 4, line);
+			}
 
 		/* Find all files/directories in the corresponding local directory. */
 
@@ -537,7 +461,7 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 		end = strchr(end, '\n');
 		*end = '\0';
 
-		start = check_command_success(start, end);
+		start = svn_check_command_success(start, end);
 
 		while ((start) && (start = strchr(start, ':')) && (start < end)) {
 			value = ++start;
@@ -630,7 +554,7 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 
 				snprintf(temp_file,
 					BUFFER_UNIT,
-					"( get-dir ( %zd:%s/%s ( %d ) false true ( kind size ) ) )\n",
+					"( get-dir ( %d:%s/%s ( %d ) false true ( kind size ) ) )\n",
 					length,
 					path_source,
 					value,
@@ -723,6 +647,121 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
 
 
 /*
+ * process_file_attributes
+ *
+ * Procedure that parses a get-file command response and extracts the MD5 checksum,
+ * last author, committed revision number and committed date.
+ */
+
+void process_file_attributes(connector *connection, char *command, node **file, int file_start, int file_end, char *path_target) {
+	char *start, *end, *temp, *md5, *columns, line[BUFFER_UNIT];
+	char *last_author,    *last_author_end;
+	char *committed_rev,  *committed_rev_end;
+	char *committed_date, *committed_date_end;
+	int  s, revision_tag_length, termwidth;
+	struct winsize   win;
+
+	termwidth = -1;
+
+	connection->response_groups = 2 * (file_end - file_start + 1);
+
+	start = send_receive_command(command, connection);
+
+	for (s = file_start; s <= file_end; s++) {
+		if (file[s] == NULL) continue;
+
+		if (connection->verbosity) {
+			if (isatty(STDERR_FILENO)) {
+				if (((columns = getenv("COLUMNS")) != NULL) && (*columns != '\0'))
+					termwidth = strtol(columns, (char **)NULL, 10);
+				else {
+					if ((ioctl(STDERR_FILENO, TIOCGWINSZ, &win) != -1) && (win.ws_col > 0))
+						termwidth = win.ws_col;
+					}
+				}
+
+			snprintf(line, BUFFER_UNIT, " f %s%s/%s", path_target, file[s]->path, file[s]->name);
+
+			if ((termwidth == -1) || (strlen(line) < (unsigned int)termwidth))
+				fprintf(stderr, "\e[2K%s\r", line);
+			else
+				fprintf(stderr, "\e[2K%.*s...\r", termwidth - 4, line);
+			}
+
+		start = svn_check_command_success(start, connection->response + connection->response_length);
+		end = terminate_response(start, connection->response + connection->response_length);
+
+		last_author    = last_author_end    = NULL;
+		committed_rev  = committed_rev_end  = NULL;
+		committed_date = committed_date_end = NULL;
+
+		/* Extract the file attributes. */
+
+		if ((start = strchr(start, ':')) != NULL) {
+			md5 = ++start;
+			start = strchr(start, ' ');
+			*start++ = '\0';
+
+			file[s]->revision_tag = NULL;
+			snprintf(file[s]->md5, 33, "%s", md5);
+			file[s]->executable = (strstr(start, "14:svn:executable") ? 1 : 0);
+
+			if ((temp = strstr(start, "last-author ")) != NULL) {
+				last_author     = strchr(temp, ':') + 1;
+				last_author_end = strchr(last_author, ' ');
+				}
+
+			if ((temp = strstr(start, "committed-rev ")) != NULL) {
+				committed_rev     = strchr(temp, ':') + 1;
+				committed_rev_end = strchr(committed_rev, ' ');
+				}
+
+			if ((temp = strstr(start, "committed-date ")) != NULL) {
+				committed_date = strchr(temp, ':') + 1;
+				temp = strchr(committed_date, 'T');
+				*temp++ = ' ';
+				temp = strchr(committed_date, '.');
+				*temp++ = 'Z';
+				committed_date_end = temp;
+				}
+
+			if (strstr(start, "( 12:svn:keywords 10:FreeBSD=%H ) ") != NULL) {
+				if ((last_author) && (committed_rev) && (committed_date)) {
+					*last_author_end    = '\0';
+					*committed_rev_end  = '\0';
+					*committed_date_end = '\0';
+
+					revision_tag_length = 8
+						+ strlen(connection->branch)
+						+ strlen(file[s]->path)
+						+ strlen(file[s]->name)
+						+ strlen(committed_rev)
+						+ strlen(committed_date)
+						+ strlen(last_author);
+
+					if ((file[s]->revision_tag = (char *)malloc(revision_tag_length)) == NULL)
+						croak("process_file_attributes revision_tag malloc");
+
+					snprintf(file[s]->revision_tag,
+						revision_tag_length,
+						": %s%s/%s %s %s %s ",
+						connection->branch,
+						file[s]->path,
+						file[s]->name,
+						committed_rev,
+						committed_date,
+						last_author
+						);
+					}
+				}
+			}
+
+		start = end + 1;
+		}
+	}
+
+
+/*
  * compare_md5
  *
  * Function that loads a local file and removes revision tags one at a time until
@@ -731,19 +770,17 @@ void build_source_directory_tree(connector *connection, char *command, node ***f
  */
 
 int compare_md5(node *source, char *file_path_target) {
-	int     total_bytes_read, fd, mismatch;
+	int     fd, mismatch;
 	size_t  temp_size;
-	char   *buffer, *start, *end, *value, *eol;
+	char   *buffer, *start, *value, *eol;
 	MD5_CTX md5_context;
 	struct stat sb;
 
 	mismatch = 1;
 
 	if (lstat(file_path_target, &sb) != -1) {
-		if ((buffer = (char *)malloc(sb.st_size + BUFFER_UNIT)) == NULL)
+		if ((buffer = (char *)malloc(sb.st_size + 1)) == NULL)
 			croak("compare_md5 temp_buffer malloc");
-
-		bzero(buffer, sb.st_size + BUFFER_UNIT);
 
 		/* Load the file into memory. */
 
@@ -752,8 +789,13 @@ int compare_md5(node *source, char *file_path_target) {
 			exit(EXIT_FAILURE);
 			}
 
-		total_bytes_read = -1;
-		while (total_bytes_read == -1) total_bytes_read = read(fd, buffer, sb.st_size);
+		if (read(fd, buffer, sb.st_size) != sb.st_size) {
+			fprintf(stderr, "read file (%s): file changed\n", file_path_target);
+			exit(EXIT_FAILURE);
+			}
+
+		buffer[sb.st_size] = '\0';
+
 		close(fd);
 
 		temp_size = sb.st_size;
@@ -766,21 +808,16 @@ int compare_md5(node *source, char *file_path_target) {
 			MD5Update(&md5_context, buffer, temp_size);
 			mismatch = strncmp(source->md5, MD5End(&md5_context, NULL), 33);
 
-			start = strstr(buffer, "$FreeBSD:");
+			start = strstr(start, "$FreeBSD:");
 
 			if ((mismatch) && (start)) {
-				end = buffer + temp_size;
-
 				start += 8;
-				value = start;
-				start = strchr(start, '$');
-				eol = strchr(value, '\n');
+				value = strchr(start, '$');
+				eol = strchr(start, '\n');
 
-				if (eol == NULL) eol = value;
-				if (value <= eol) {
-					memmove(value, start, temp_size - (start - buffer));
-					temp_size -= (start - value);
-					end -= (start - value);
+				if ((value) && ((eol == NULL) || (value < eol))) {
+					memmove(start, value, temp_size - (value - buffer));
+					temp_size -= (value - start);
 					buffer[temp_size] = '\0';
 					}
 				}
@@ -801,7 +838,7 @@ int compare_md5(node *source, char *file_path_target) {
 void get_files(connector *connection, char *command, char *path_target, node **file, int file_start, int file_end, int revision) {
 	int   x, t, out, temp, bytes_read, file_length_source, file_length_target;
 	int   offset, position, block_size_markers, file_block_remainder;
-	int   blocks, temp_file_length;
+	unsigned int   blocks, temp_file_length;
 	int   total_bytes_read, raw_size, first_response, last_response;
 	int   block_size, tag_length;
 	char *temp_file, *file_path_source, *file_path_target;
@@ -896,8 +933,8 @@ void get_files(connector *connection, char *command, char *path_target, node **f
 
 		/* Extract the file from the response stream. */
 
-		start = check_command_success(start, end);
-		start = check_command_success(start, end);
+		start = svn_check_command_success(start, end);
+		start = svn_check_command_success(start, end);
 		start--;
 
 		begin = strchr(start, ':') + 1;
@@ -984,7 +1021,7 @@ void get_files(connector *connection, char *command, char *path_target, node **f
  *
  */
 
-void usage() {
+void usage(void) {
 	fprintf(stderr, "Usage: svnup -h host -b branch -l local_directory\n");
 	fprintf(stderr, "  Options:\n");
 	fprintf(stderr, "    -4  Use IPv4 addresses only.\n");
@@ -1026,8 +1063,7 @@ int main(int argc, char **argv) {
 	struct in_addr      hostaddr;
 	struct hostent     *host;
 	struct stat         local_directory;
-
-	connector connection;
+	connector           connection;
 
 	connection.verbosity = 1;
 	port = revision = file_count = 0;
@@ -1036,7 +1072,7 @@ int main(int argc, char **argv) {
 
 	addr = branch = path_target = NULL;
 
-	while ((option = getopt(argc, argv, "46b:h:l:p:r:v:")) != -1) {
+	while ((option = getopt(argc, argv, "46b:h:l:p:r:v:V")) != -1) {
 		switch (option) {
 			case '4': family = AF_INET;  break;
 			case '6': family = AF_INET6; break;
@@ -1046,6 +1082,7 @@ int main(int argc, char **argv) {
 			case 'p': port = strtol(optarg, (char **)NULL, 10); break;
 			case 'r': revision = strtol(optarg, (char **)NULL, 10); break;
 			case 'v': connection.verbosity = strtol(optarg, (char **)NULL, 10); break;
+			case 'V': fprintf(stdout, "svnup version 0.56\n"); exit(0);
 			}
 		}
 
@@ -1068,8 +1105,8 @@ int main(int argc, char **argv) {
 			}
 		}
 	else {
-		fprintf(stderr, "%s : %s\n", path_target, strerror(errno));
-		exit(EXIT_FAILURE);
+		if (mkdir(path_target, 0755))
+			croak("Cannot create target directory.");
 		}
 
 	connection.response_blocks = 128;
@@ -1106,7 +1143,7 @@ int main(int argc, char **argv) {
 
 	snprintf(command,
 		COMMAND_BUFFER,
-		"( 2 ( edit-pipeline svndiff1 absent-entries commit-revprops depth log-revprops atomic-revprops partial-replay ) %ld:svn://%s/%s 10:svnup-0.55 ( ) )\n",
+		"( 2 ( edit-pipeline svndiff1 absent-entries commit-revprops depth log-revprops atomic-revprops partial-replay ) %ld:svn://%s/%s 10:svnup-0.56 ( ) )\n",
 		strlen(addr) + strlen(branch) + 7,
 		addr,
 		branch
@@ -1114,7 +1151,7 @@ int main(int argc, char **argv) {
 
 	send_receive_command(command, &connection);
 
-	start = check_command_success(connection.response, connection.response + connection.response_length);
+	start = svn_check_command_success(connection.response, connection.response + connection.response_length);
 
 	/* Login anonymously. */
 
@@ -1126,7 +1163,7 @@ int main(int argc, char **argv) {
 	if (revision <= 0) {
 		send_receive_command("( get-latest-rev ( ) )\n", &connection);
 
-		start = check_command_success(connection.response, connection.response + connection.response_length);
+		start = svn_check_command_success(connection.response, connection.response + connection.response_length);
 
 		if ((start != NULL) && (start == strstr(start, "( success ( "))) {
 			start += 12;
@@ -1189,13 +1226,15 @@ int main(int argc, char **argv) {
 		strncat(command, temp_file, COMMAND_BUFFER - length);
 
 		if (length > COMMAND_BUFFER_THRESHOLD) {
-			process_file_attributes(&connection, command, file, x0, x);
+			process_file_attributes(&connection, command, file, x0, x, path_target);
 			command[0] = '\0';
 			x0 = x + 1;
 			}
 		}
 
-	process_file_attributes(&connection, command, file, x0, x - 1);
+	process_file_attributes(&connection, command, file, x0, x - 1, path_target);
+
+	if (connection.verbosity) fprintf(stderr, "\r\e[2K\r");
 
 	command[0] = '\0';
 	connection.response_groups = 0;
