@@ -1,0 +1,40 @@
+svnup-0.63 - 17 April 2013
+	* Fixed a bug where filenames containing multiple hex encoded
+		characters weren't being properly decoded.
+
+svnup-0.62 - 11 April 2013
+	* Implemented binary search tree for faster lookups of "known files".
+	* Added support for handling symbolic links in the repository.
+	* Fixed a bug where file names with hex encoded characters sent
+		during http transfers weren't properly decoded.
+	* Fixed bug when allocating space for the /tmp/svnup directory -
+		special thanks to (Ilya A. Arkhipov <m1cro@rambler-co.ru>).
+	* Fixed bug where incorrect number of bytes were sent in send_command -
+		special thanks to <boco@ufanet.ru>.
+
+svnup-0.61 - 6 April 2013
+	* Fixed a bug with file deletion.
+	* Minor speed improvement with "known file" lookup.
+	* Fixed several valgrind-detected small memory leaks.
+	* Fixed a segfault when https:// was added to a -h parameter.
+
+svnup-0.60 - 3 April 2013
+	* http/https support added.
+	* added support for a configuration/preferences/aliases file.
+	* added IPv6 support.
+
+svnup-0.56 - 2 March 2013
+	* Fixed bug in check_md5 when reinserting revision tags in known files -
+		special thanks to Rudolf Cejka <cejkar@fit.vutbr.cz>.
+
+svnup-0.55 - 27 February 2013
+	* Major rewrite of command transmission routine (what were once
+		individual commands are now grouped together and sent in bulk).
+		Significant performance improvement and the tool is now useable.
+	* svnup is now in the FreeBSD ports tree under net/svnup.
+
+svnup-0.51 - 24 February 2013
+	* Performance improvement (it's now just painfully slow).
+
+svnup-0.5 - 23 February 2013
+	* Initial proof-of-concept release.  Excruciatingly slow performance.
