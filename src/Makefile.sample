@@ -1,8 +1,8 @@
 # to build svnup, comment out either below
 # for systems which have libmd for md5, choose former
 # for other systems which have openssl, choose latter
-#MDFLAGS= -lmd
-#MDFLAGS= -lcrypto -DOPENSSL
+#MDFLAGS= -lmd -lssl
+#MDFLAGS= -lssl -DOPENSSL
 
 svnup: svnup.c
 	$(CC) -o $@ $(CFLAGS) $? $(MDFLAGS)
