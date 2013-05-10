@@ -25,15 +25,15 @@
 .\" $FreeBSD$
 .\"
 .Dd December 30, 2012
-.Os FreeBSD
-.Dt svnup(1)
+.Dt SVNUP
+.Os
 .Sh NAME
 .Nm svnup
 .Nd A lightweight, dependency-free program to pull source from an Apache Subversion server.
 .Sh SYNOPSIS
 .Nm
 .Cm section
-.Op Fl 46
+.Op Fl 46nV
 .Op Fl b Ar branch
 .Op Fl h Ar hostname/address
 .Op Fl l Ar local directory
@@ -55,11 +55,30 @@ The Subversion branch to retrieve.
 The hostname or IP address of the Subversion repository.
 .It Fl l
 The local directory to save the repository's files to.
+.It Fl n
+Display the last known revision number for the specified section and exit.
 .It Fl r
-The revision number to retreive (defaults to the branch's most recent revision if this option is not specified). 
+The revision number to retrieve (defaults to the branch's most recent revision if this option is not specified). 
 .It Fl v
 How verbose the output should be (0 = no output, 1 = show only names of the updated files/folders, 2 = also show more file information, 3 = also show commands sent to the server, 4 = also show svn response codes -- useful when debugging).
+.It Fl V
+Display the version number and exit.
 .El
+.Sh FILES
+.Bl -tag -width "/usr/local/etc/svnup.conf"
+.It /usr/local/etc/svnup.conf
+Default location of the
+.Nm
+configuration file.
+.It /var/tmp/svnup
+Default location where
+.Nm
+stores its lists of known files.  The files stored here are used during subsequent runs to determine which files have been removed from the repository and are safe to delete locally.
+.El
+.Sh DIAGNOSTICS
+Because
+.Nm
+doesn't use the .svn folder that Subversion's svn client uses, you may experience difficulties using svn after using svnup in a given directory tree.
 .Sh EXAMPLES
 Using the configuration options for commonly used branches stored in /usr/local/etc/svnup.conf, to retrieve/checkout a copy of the most recent revision of the stable/9 branch:
 .Pp
@@ -68,23 +87,10 @@ Using the configuration options for commonly used branches stored in /usr/local/
 To retrieve a copy of the most recent stable/9 branch, but store it in /tmp/stable (without modifying /usr/local/etc/svnup.conf)
 .Pp
 .Dl "svnup stable -l /tmp/stable"
-.Sh FILES
-.Bl -tag -width "/usr/local/etc/svnup.conf"
-.It /usr/local/etc/svnup.conf
-Default location of the
-.Nm
-configuration file.
-.It /tmp/svnup
-Default location where
-.Nm
-stores its temp files.  The files stored here are used during subsequent runs to determine which files have been removed from the repository and are safe to delete locally.
-.Sh WARNINGS
-Because
-.Nm
-doesn't use the .svn folder that Subversion's svn client uses, you may experience difficulties using svn after using svnup in a given directory tree.
 .Sh SEE ALSO
 .Xr svnup.conf 5
 .Sh AUTHORS
 John Mehr <jmehr@umn.edu> is the author of
 .Nm
 and this man page.
+
