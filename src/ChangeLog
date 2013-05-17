@@ -1,9 +1,12 @@
+svnup-0.72 - 16 May 2013
+	* Fixed a bug with the -r command line option.
+	* Added a progress indicator to the output when the verbosity is > 1.
+	* More code cleanup - special thanks to Eitan Adler <lists@eitanadler.com>.
+	* Switched from non-blocking to blocking I/O.
+
 svnup-0.71 - 9 May 2013
-	* Fixed a bug with the -V command line option not displaying the
-		version number.
+	* Fixed a bug with the -V command line option.
 	* Code cleanup - special thanks to Eitan Adler <lists@eitanadler.com>.
-	* Changed the default directory for storing "known files" to
-		/var/tmp/svnup/ in svnup.conf.
 
 svnup-0.70 - 7 May 2013
 	* Merged the http and svn code paths.
@@ -11,11 +14,10 @@ svnup-0.70 - 7 May 2013
 		in <sys/tree.h>
 	* Fixed a bug where revision tags were improperly included if the
 		FreeBSD=%H was not included in the file attributes.
-	* Changed the default directory for storing "known files" to
-		/var/db/svnup/ in svnup.conf.
+	* Changed the default directory for storing known files to
+		/var/db/svnup/.
 	* Added the command line option -n to display section's the last
 		known revision and exit.
-	* Compiles cleanly with WARNS=6 set.
 
 svnup-0.63 - 17 April 2013
 	* Fixed a bug where filenames containing multiple hex encoded
@@ -27,7 +29,7 @@ svnup-0.62 - 11 April 2013
 	* Fixed a bug where file names with hex encoded characters sent
 		during http transfers weren't properly decoded.
 	* Fixed bug when allocating space for the /tmp/svnup directory -
-		special thanks to Ilya A. Arkhipov <m1cro@rambler-co.ru>.
+		special thanks to (Ilya A. Arkhipov <m1cro@rambler-co.ru>).
 	* Fixed bug where incorrect number of bytes were sent in send_command -
 		special thanks to <boco@ufanet.ru>.
 
@@ -57,4 +59,3 @@ svnup-0.51 - 24 February 2013
 
 svnup-0.5 - 23 February 2013
 	* Initial proof-of-concept release.  Excruciatingly slow performance.
-
