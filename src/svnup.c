@@ -49,7 +49,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define SVNUP_VERSION "0.71"
+#define SVNUP_VERSION "0.72"
 #define BUFFER_UNIT 4096
 #define COMMAND_BUFFER 32768
 #define COMMAND_BUFFER_THRESHOLD 32000
@@ -76,7 +76,7 @@ typedef struct {
 	char          *known_files_old;
 	char          *known_files_new;
 	int            verbosity;
-	} connector;
+} connector;
 
 
 typedef struct {
@@ -85,48 +85,46 @@ typedef struct {
 	char          *md5;
 	unsigned long  size;
 	unsigned long  raw_size;
-	unsigned int   index;
 	char           executable;
 	char           special;
 	char           download;
 	char          *revision_tag;
-	} file_node;
+} file_node;
 
 
 struct tree_node {
 	RB_ENTRY(tree_node)  link;
 	char                *path;
 	char                *md5;
-	};
+};
 
 
 /* Function Prototypes */
 
-static int	 tree_node_compare(const struct tree_node *, const struct tree_node *);
-void		 prune(connector *, char *);
-char		*find_response_end(unsigned short, char *, char *);
-char		*terminate_response(unsigned short, char *, char *);
-void		 reset_connection(connector *);
-void		 send_command(connector *, const char *);
-int		 check_command_success(unsigned short, char **, char **);
-char		*process_command_svn(connector *, const char *, unsigned int);
-char		*process_command_http(connector *, char *);
-char		*parse_xml_value(char *, char *, const char *);
-void		 parse_response_group(connector *, char **, char **);
-int		 parse_response_item(connector *, char *, int *, char **, char **);
-int		 confirm_md5(char *, char *);
-file_node	*new_file_node(file_node ***, int *, int *);
-void		 new_buffer(char ***, int **, int *);
-void		 save_file(char *, char *, char *, char *, int, int);
-void		 save_known_file_list(connector *, file_node **, int);
-void		 set_configuration_parameters(connector *, char *, size_t, const char *);
-void		 load_configuration(connector *, char *, char *);
-void		 create_directory(char *);
-void		 process_report_svn(connector *, char *, file_node ***, int *, int *);
-void		 process_report_http(connector *, file_node ***, int *file_count, int *);
-void		 parse_additional_attributes(connector *, char *, char *, file_node *);
-void		 get_files(connector *, char *, char *, file_node **, int, int);
-void		 usage(char *);
+static int		 tree_node_compare(const struct tree_node *, const struct tree_node *);
+static void		 prune(connector *, char *);
+static char		*find_response_end(unsigned short, char *, char *);
+static void		 reset_connection(connector *);
+static void		 send_command(connector *, const char *);
+static int		 check_command_success(unsigned short, char **, char **);
+static char		*process_command_svn(connector *, const char *, unsigned int);
+static char		*process_command_http(connector *, char *);
+static char		*parse_xml_value(char *, char *, const char *);
+static void		 parse_response_group(connector *, char **, char **);
+static int		 parse_response_item(connector *, char *, int *, char **, char **);
+static int		 confirm_md5(char *, char *);
+static file_node	*new_file_node(file_node ***, int *, int *);
+static void		 new_buffer(char ***, int **, int *);
+static void		 save_file(char *, char *, char *, char *, int, int);
+static void		 save_known_file_list(connector *, file_node **, int);
+static void		 set_configuration_parameters(connector *, char *, size_t, const char *);
+static void		 load_configuration(connector *, char *, char *);
+static void		 create_directory(char *);
+static void		 process_report_svn(connector *, char *, file_node ***, int *, int *);
+static void		 process_report_http(connector *, file_node ***, int *file_count, int *);
+static void		 parse_additional_attributes(connector *, char *, char *, file_node *);
+static void		 get_files(connector *, char *, char *, file_node **, int, int);
+static void		 usage(char *);
 
 /*
  * tree_node_compare
@@ -134,9 +132,11 @@ void		 usage(char *);
  * Function that informs the Red-Black tree functions how to sort keys.
  */
 
-static int tree_node_compare(const struct tree_node *a, const struct tree_node *b) {
+static int
+tree_node_compare(const struct tree_node *a, const struct tree_node *b)
+{
 	return strcmp(a->path, b->path);
-	}
+}
 
 RB_HEAD(rbtree, tree_node) known_files = RB_INITIALIZER(&known_files);
 RB_PROTOTYPE(rbtree, tree_node, link, tree_node_compare);
@@ -148,7 +148,7 @@ RB_GENERATE(rbtree, tree_node, link, tree_node_compare);
  * Procedure that recursively removes the file or directory tree passed in.
  */
 
-void
+static void
 prune(connector *connection, char *path_target)
 {
 	char          *temp_file;
@@ -205,7 +205,7 @@ prune(connector *connection, char *path_target)
  * order to find the end of the response.
  */
 
-char *
+static char *
 find_response_end(unsigned short port, char *start, char *end)
 {
 	int count = 0;
@@ -224,28 +224,12 @@ find_response_end(unsigned short port, char *start, char *end)
 
 
 /*
- * terminate_response
- *
- * Function that puts a null character at the end of a command's response.
- */
-
-char *
-terminate_response(unsigned short port, char *start, char *end)
-{
-	end = find_response_end(port, start, end);
-	*end = '\0';
-
-	return (end);
-}
-
-
-/*
  * reset_connection
  *
  * Procedure that (re)establishes a connection with the server.
  */
 
-void
+static void
 reset_connection(connector *connection)
 {
 	struct addrinfo hints, *start, *temp;
@@ -288,8 +272,6 @@ reset_connection(connector *connection)
 		freeaddrinfo(temp);
 	}
 
-	fcntl(connection->socket_descriptor, F_SETFL, O_NONBLOCK);
-
 	if (connection->port == 443) {
 		if (SSL_library_init() == 0)
 			err(EXIT_FAILURE, "reset_connection: SSL_library_init");
@@ -326,7 +308,7 @@ reset_connection(connector *connection)
  * Procedure that sends commands to the http/svn server.
  */
 
-void
+static void
 send_command(connector *connection, const char *command)
 {
 	int bytes_written, total_bytes_written, bytes_to_write;
@@ -339,20 +321,26 @@ send_command(connector *connection, const char *command)
 			fprintf(stdout, "<< %d bytes\n%s", bytes_to_write, command);
 
 		while (total_bytes_written < bytes_to_write) {
-			bytes_written = -1;
-			while (bytes_written == -1)
-				if (connection->port == 443)
-					bytes_written = SSL_write(
-						connection->ssl,
-						command + total_bytes_written,
-						bytes_to_write - total_bytes_written
-						);
-				else
-					bytes_written = write(
-						connection->socket_descriptor,
-						command + total_bytes_written,
-						bytes_to_write - total_bytes_written
-						);
+			if (connection->port == 443)
+				bytes_written = SSL_write(
+					connection->ssl,
+					command + total_bytes_written,
+					bytes_to_write - total_bytes_written
+					);
+			else
+				bytes_written = write(
+					connection->socket_descriptor,
+					command + total_bytes_written,
+					bytes_to_write - total_bytes_written
+					);
+
+			if (bytes_written <= 0) {
+				if ((bytes_written < 0) && (errno == EINTR)) {
+					continue;
+				} else {
+					err(EXIT_FAILURE, "send command");
+					}
+			}
 
 			total_bytes_written += bytes_written;
 		}
@@ -366,7 +354,7 @@ send_command(connector *connection, const char *command)
  * Function that makes sure a failure response has not been sent from the svn server.
  */
 
-int
+static int
 check_command_success(unsigned short port, char **start, char **end)
 {
 	int  ok = 1;
@@ -379,6 +367,8 @@ check_command_success(unsigned short port, char **start, char **end)
 			ok = 0;
 
 		if (ok) {
+			while (**start == ' ') (*start)++;
+
 			if (strstr(*start, "( success ") == *start) {
 				if (strstr(*start, "( success ( ( ) 0: ) )") == *start)
 					*start += 23;
@@ -408,7 +398,7 @@ check_command_success(unsigned short port, char **start, char **end)
  * sure that the expected number of response strings have been received.
  */
 
-char *
+static char *
 process_command_svn(connector *connection, const char *command, unsigned int expected_bytes)
 {
 	int           bytes_read, ok, count;
@@ -425,15 +415,11 @@ process_command_svn(connector *connection, const char *command, unsigned int exp
 	do {
 		bzero(input, BUFFER_UNIT + 1);
 
-		bytes_read = -1;
-		while (bytes_read == -1)
-			bytes_read = read(
-				connection->socket_descriptor,
-				input,
-				BUFFER_UNIT
-				);
+		bytes_read = read(connection->socket_descriptor, input, BUFFER_UNIT);
+		
+		if (bytes_read <= 0) {
+			if (errno == EINTR) continue;
 
-		if (bytes_read == 0) {
 			try++;
 			if (try > 5) errx(EXIT_FAILURE, "Error in svn stream.  Quitting.");
 			if (try > 1) fprintf(stderr, "Error in svn stream, retry #%d\n", try);
@@ -508,7 +494,7 @@ process_command_svn(connector *connection, const char *command, unsigned int exp
  * sure that the expected number of response bytes have been received.
  */
 
-char *
+static char *
 process_command_http(connector *connection, char *command)
 {
 	int   bytes_read, chunk, gap, chunked_transfer, spread, read_more;
@@ -542,20 +528,18 @@ process_command_http(connector *connection, char *command)
 			break;
 
 		if (read_more) {
-			bytes_read = -1;
-			while (bytes_read == -1)
-				if (connection->port == 443)
-					bytes_read = SSL_read(
-						connection->ssl,
-						input,
-						BUFFER_UNIT
-						);
-				else
-					bytes_read = read(
-						connection->socket_descriptor,
-						input,
-						BUFFER_UNIT
-						);
+			if (connection->port == 443)
+				bytes_read = SSL_read(
+					connection->ssl,
+					input,
+					BUFFER_UNIT
+					);
+			else
+				bytes_read = read(
+					connection->socket_descriptor,
+					input,
+					BUFFER_UNIT
+					);
 
 			if (connection->response_length + bytes_read > connection->response_blocks * BUFFER_UNIT) {
 				connection->response_blocks += 1;
@@ -568,7 +552,9 @@ process_command_http(connector *connection, char *command)
 					err(EXIT_FAILURE, "process_command_http realloc");
 			}
 
-			if (bytes_read == 0) {
+			if (bytes_read <= 0) {
+				if (errno == EINTR) continue;
+
 				try++;
 				if (try > 5) errx(EXIT_FAILURE, "Error in http stream.  Quitting.");
 				if (try > 1) fprintf(stderr, "Error in http stream, retry #%d\n", try);
@@ -610,7 +596,8 @@ process_command_http(connector *connection, char *command)
 			if (marker1) chunked_transfer = 0;
 			if (marker2) chunked_transfer = 1;
 
-			if ((marker1) && (marker2)) chunked_transfer = (marker1 < marker2) ? 0 : 1;
+			if ((marker1) && (marker2))
+				chunked_transfer = (marker1 < marker2) ? 0 : 1;
 
 			if (chunked_transfer == 0) {
 				chunked_transfer = 0;
@@ -655,10 +642,11 @@ process_command_http(connector *connection, char *command)
 				);
 	}
 
-	if (connection->verbosity > 2) fprintf(stderr, "\n");
+	if (connection->verbosity > 2)
+		fprintf(stderr, "\n");
 
 	if (connection->verbosity > 3)
-		fprintf(stdout, "==========\n%s\n==========\n", connection->response);
+		fprintf(stderr, "==========\n%s\n==========\n", connection->response);
 
 	return (connection->response);
 }
@@ -670,7 +658,7 @@ process_command_http(connector *connection, char *command)
  * Function that returns the text found between the opening and closing tags passed in.
  */
 
-char *
+static char *
 parse_xml_value(char *start, char *end, const char *tag)
 {
 	char   *data_start, *data_end, *end_tag, *value, temp_end;
@@ -714,7 +702,7 @@ parse_xml_value(char *start, char *end, const char *tag)
  * Procedure that isolates the next response group from the list of responses.
  */
 
-void
+static void
 parse_response_group(connector *connection, char **start, char **end)
 {
 	if (connection->port == 3690)
@@ -736,7 +724,7 @@ parse_response_group(connector *connection, char **start, char **end)
  * Function that isolates the next response from the list of responses.
  */
 
-int
+static int
 parse_response_item(connector *connection, char *end, int *count, char **item_start, char **item_end)
 {
 	int ok = 1, c = 0, has_entries = 0;
@@ -792,7 +780,7 @@ parse_response_item(connector *connection, char *end, int *count, char **item_st
  * has run out of $ FreeBSD : markers.
  */
 
-int
+static int
 confirm_md5(char *md5, char *file_path_target)
 {
 	int      fd, mismatch;
@@ -863,7 +851,7 @@ confirm_md5(char *md5, char *file_path_target)
  * array that stores file_nodes.
  */
 
-file_node *
+static file_node *
 new_file_node(file_node ***file, int *file_count, int *file_max)
 {
 	file_node *node;
@@ -878,7 +866,6 @@ new_file_node(file_node ***file, int *file_count, int *file_max)
 	node->size = node->raw_size = 0;
 	node->href = node->revision_tag = NULL;
 	node->special = node->executable = node->download = 0;
-	node->index = *file_count;
 
 	(*file)[*file_count] = node;
 
@@ -900,7 +887,7 @@ new_file_node(file_node ***file, int *file_count, int *file_max)
  * sent and expands the dynamic array that keeps track of them.
  */
 
-void
+static void
 new_buffer(char ***buffer, int **buffer_commands, int *buffers)
 {
 	(*buffers)++;
@@ -925,7 +912,7 @@ new_buffer(char ***buffer, int **buffer_commands, int *buffers)
  * Procedure that saves a file and inserts revision tags if any exist.
  */
 
-void
+static void
 save_file(char *filename, char *revision_tag, char *start, char *end, int executable, int special)
 {
 	char *tag;
@@ -967,7 +954,7 @@ save_file(char *filename, char *revision_tag, char *start, char *end, int execut
  * Procedure that saves the list of files known to be in the repository.
  */
 
-void
+static void
 save_known_file_list(connector *connection, file_node **file, int file_count)
 {
 	struct tree_node  find, *found;
@@ -1009,7 +996,7 @@ save_known_file_list(connector *connection, file_node **file, int file_count)
  * space and stores the values.
  */
 
-void
+static void
 set_configuration_parameters(connector *connection, char *buffer, size_t length, const char *section)
 {
 	char *line, *item, *bracketed_section;
@@ -1128,7 +1115,7 @@ load_configuration(connector *connection, char *configuration_file, char *sectio
  * Procedure that checks and creates a local directory if possible. 
  */
 
-void
+static void
 create_directory(char *directory)
 {
 	struct stat local;
@@ -1150,7 +1137,7 @@ create_directory(char *directory)
  * in a dynamic array of file_nodes.
  */
 
-void
+static void
 process_report_svn(connector *connection, char *command, file_node ***file, int *file_count, int *file_max)
 {
 	char   *start, *end, *item_start, *item_end, *name, *marker, *command_start;
@@ -1332,7 +1319,7 @@ process_report_svn(connector *connection, char *command, file_node ***file, int 
  * in a dynamic array of file_nodes.
  */
 
-void
+static void
 process_report_http(connector *connection, file_node ***file, int *file_count, int *file_max)
 {
 	int        x, revision_length;
@@ -1344,8 +1331,7 @@ process_report_http(connector *connection, file_node ***file, int *file_count, i
 
 	revision_length = 1;
 	x = connection->revision;
-	while ((int)(x /= 10) > 0)
-		revision_length++;
+	while ((int)(x /= 10) > 0) revision_length++;
 
 	snprintf(command,
 		COMMAND_BUFFER,
@@ -1430,7 +1416,7 @@ process_report_http(connector *connection, file_node ***file, int *file_count, i
  * and committed rev and saves them for later inclusion in revision tags. 
  */
 
-void
+static void
 parse_additional_attributes(connector *connection, char *start, char *end, file_node *file)
 {
 	char  revision_tag[BUFFER_UNIT], *value, *temp, *md5;
@@ -1534,7 +1520,7 @@ parse_additional_attributes(connector *connection, char *start, char *end, file_
  * Procedure that extracts and saves files from the response stream.
  */
 
-void
+static void
 get_files(connector *connection, char *command, char *path_target, file_node **file, int file_start, int file_end)
 {
 	int     x, offset, position, block_size_markers, file_block_remainder;
@@ -1675,7 +1661,7 @@ get_files(connector *connection, char *command, char *path_target, file_node **f
  * Procedure that prints a summary of command line options and exits.
  */
 
-void
+static void
 usage(char *configuration_file)
 {
 	fprintf(stderr, "Usage: svnup <section> [options]\n\n");
@@ -1709,13 +1695,17 @@ main(int argc, char **argv)
 {
 	char *start, *end, *value, *path, *md5, command[COMMAND_BUFFER + 1];
 	char  temp_buffer[BUFFER_UNIT], **buffer, *configuration_file;
-	int   option, x, fd, file_count, file_max, length, command_count;
+	char *columns, file_path_target[BUFFER_UNIT];
+	int   option, x, fd, file_count, file_max, length, command_count, term_width, file_width;
 	int   buffers, *buffer_commands, buffer_full, b, f, c, f0, display_last_revision;
 
-	struct stat local;
-	struct tree_node *data = NULL;
-	file_node **file = NULL;
-	connector connection;
+	struct winsize     win;
+	struct stat        local;
+	struct tree_node  *data = NULL;
+	file_node        **file = NULL;
+	connector          connection;
+
+	term_width = -1;
 
 	buffers = -1;
 	buffer = NULL;
@@ -1733,6 +1723,9 @@ main(int argc, char **argv)
 		err(EXIT_FAILURE, "process_directory source malloc");
 
 	command[0] = '\0';
+
+	connection.response_blocks = 10240;
+	connection.response_length = connection.revision = 0;
 
 	connection.address = connection.branch = connection.path_target = NULL;
 	connection.path_work = connection.known_files = NULL;
@@ -1759,7 +1752,7 @@ main(int argc, char **argv)
 		optind = 2;
 	}
 
-	while ((option = getopt(argc, argv, "46b:h:l:nr:v")) != -1) {
+	while ((option = getopt(argc, argv, "46Vb:h:l:nr:v:")) != -1) {
 		switch (option) {
 			case '4': connection.family = AF_INET;  break;
 			case '6': connection.family = AF_INET6; break;
@@ -1863,9 +1856,6 @@ main(int argc, char **argv)
 	}
 
 	/* Initialize connection with the server and get the latest revision number. */
-
-	connection.response_blocks = 10240;
-	connection.response_length = connection.revision = 0;
 
 	if ((connection.response = (char *)malloc(connection.response_blocks * BUFFER_UNIT + 1)) == NULL)
 		err(EXIT_FAILURE, "main connection.response malloc");
@@ -1971,7 +1961,15 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (connection.verbosity) printf("Fetching revision: %d\n", connection.revision);
+	if (connection.verbosity)
+		printf("# Fetching revision: %d\n", connection.revision);
+
+	if (connection.verbosity > 1) {
+		fprintf(stderr, "# Address: %s\n", connection.address);
+		fprintf(stderr, "# Branch:  %s\n", connection.branch);
+		fprintf(stderr, "# Target:  %s\n", connection.path_target);
+		fprintf(stderr, "# WorkDir: %s\n", connection.path_work);
+		}
 
 	if (connection.port == 3690) {
 		connection.response_groups = 2;
@@ -1989,6 +1987,10 @@ main(int argc, char **argv)
 		process_report_http(&connection, &file, &file_count, &file_max);
 
 	/* Get additional file information not contained in the first report. */
+
+	file_width = 2;
+	x = file_count;
+	while ((int)(x /= 10) > 0) file_width++;
 
 	for (f = 0; f < file_count; f++) {
 		if (connection.port == 3690)
@@ -2030,6 +2032,7 @@ main(int argc, char **argv)
 		if (buffer_commands[b] == 0) break;
 
 		connection.response_groups = buffer_commands[b] * 2;
+
 		if (connection.port == 80)   process_command_http(&connection, buffer[b]);
 		if (connection.port == 443)  process_command_http(&connection, buffer[b]);
 		if (connection.port == 3690) process_command_svn(&connection, buffer[b], 0);
@@ -2086,6 +2089,41 @@ main(int argc, char **argv)
 				strncat(command, temp_buffer, COMMAND_BUFFER - length);
 			}
 
+			if (connection.verbosity > 1) {
+				if (isatty(STDERR_FILENO)) {
+					if (((columns = getenv("COLUMNS")) != NULL) && (*columns != '\0'))
+						term_width = strtol(columns, (char **)NULL, 10);
+					else {
+						if ((ioctl(STDERR_FILENO, TIOCGWINSZ, &win) != -1) && (win.ws_col > 0))
+							term_width = win.ws_col;
+					}
+				}
+
+				snprintf(file_path_target,
+					BUFFER_UNIT,
+					"%s%s",
+					connection.path_target,
+					file[f]->path
+					);
+	
+				x = 0;
+				if (term_width == -1) x = 1;
+				if (15 + 2 * file_width + strlen(file_path_target) < (unsigned int)term_width) x = 1;
+
+				snprintf(temp_buffer,
+					BUFFER_UNIT,
+					"\e[2K% *d of %d (% 5.1f%%)  %s%s\r",
+					file_width,
+					f + 1,
+					file_count,
+					100.0 * f / (double)file_count,
+					(x ? "" : "..."),
+					file_path_target + (x ? 0 : strlen(file_path_target) - term_width + file_width + file_width + 18)
+					);
+
+				fprintf(stderr, "%s", temp_buffer);
+			}
+
 			start = end + 1;
 			f++;
 		}
@@ -2101,6 +2139,9 @@ main(int argc, char **argv)
 
 		f0 = f;
 	}
+
+	if (connection.verbosity > 1)
+		fprintf(stderr, "\n");
 
 	save_known_file_list(&connection, file, file_count);
 
@@ -2138,3 +2179,4 @@ main(int argc, char **argv)
 
 	return (0);
 }
+
