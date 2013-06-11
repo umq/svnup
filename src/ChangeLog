@@ -1,3 +1,10 @@
+svnup-0.9 - 8 June 2013
+	* Added a new command line and show all files that exist in the 
+		target directory structure that do not exist in the repository.
+	* Fixed bug with the way the progress indicator is displayed.
+	* Fixed segmentation fault that occurred when using the svn protocol
+		and displaying the progress indicator.
+
 svnup-0.73 - 2 June 2013
 	* Significantly improved performance when using the http/https protocol
 		to fetch incremental updates.

@@ -33,7 +33,7 @@
 .Sh SYNOPSIS
 .Nm
 .Cm section
-.Op Fl 46ntV
+.Op Fl 46fntV
 .Op Fl b Ar branch
 .Op Fl h Ar hostname/address
 .Op Fl l Ar local directory
@@ -53,6 +53,8 @@ Use IPv4 addresses only.
 Use IPv6 addresses only.
 .It Fl b
 The Subversion branch to retrieve.
+.It Fl f
+Display all files found in the target directory structure that are not present in the repository (each file is displayed with a leading "*").
 .It Fl h
 The hostname or IP address of the Subversion repository.
 .It Fl l

@@ -49,10 +49,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define SVNUP_VERSION "0.73"
+
+#define SVNUP_VERSION "0.90"
 #define BUFFER_UNIT 4096
 #define COMMAND_BUFFER 32768
 #define COMMAND_BUFFER_THRESHOLD 32000
+
 
 typedef struct {
 	int       socket_descriptor;
@@ -77,6 +79,7 @@ typedef struct {
 	char     *known_files_new;
 	long      known_files_size;
 	int       trim_tree;
+	int       extra_files;
 	int       verbosity;
 } connector;
 
@@ -307,8 +310,8 @@ static void
 reset_connection(connector *connection)
 {
 	struct addrinfo hints, *start, *temp;
-	int   error, option;
-	char  type[10];
+	int             error, option;
+	char            type[10];
 
 	if (connection->socket_descriptor)
 		if (close(connection->socket_descriptor) != 0)
@@ -496,7 +499,7 @@ process_command_svn(connector *connection, const char *command, unsigned int exp
 		bytes_read = read(connection->socket_descriptor, input, BUFFER_UNIT);
 
 		if (bytes_read <= 0) {
-			if (errno == EINTR) continue;
+			if ((errno == EINTR) || (errno == 0)) continue;
 
 			if (++try > 5)
 				errx(EXIT_FAILURE, "Error in svn stream.  Quitting.");
@@ -529,7 +532,8 @@ process_command_svn(connector *connection, const char *command, unsigned int exp
 				fprintf(stdout, "==========\n>> Response Parse:\n");
 
 			check = input;
-			if ((count == 0) && (input[0] == ' ')) *check++ = '\0';
+			if ((count == 0) && (input[0] == ' '))
+				*check++ = '\0';
 
 			do {
 				count += (*check == '(' ? 1 : (*check == ')' ? -1 : 0));
@@ -556,8 +560,11 @@ process_command_svn(connector *connection, const char *command, unsigned int exp
 		if ((expected_bytes == 0) && (connection->verbosity > 3))
 			fprintf(stderr, ". = %d %d\n", group, connection->response_groups);
 
-		if (group == connection->response_groups) ok = 1;
-		if (position == expected_bytes) ok = 1;
+		if (group == connection->response_groups)
+			ok = 1;
+
+		if (position == expected_bytes)
+			ok = 1;
 
 	}
 	while (!ok);
@@ -634,7 +641,8 @@ process_command_http(connector *connection, char *command)
 			}
 
 			if (bytes_read <= 0) {
-				if (errno == EINTR) continue;
+				if ((errno == EINTR) || (errno == 0))
+					continue;
 
 				if (++try > 5)
 					errx(EXIT_FAILURE, "Error in http stream.  Quitting.");
@@ -687,6 +695,7 @@ process_command_http(connector *connection, char *command)
 			if (chunked_transfer == 0) {
 				chunked_transfer = 0;
 				chunk = strtol(marker1 + 16, (char **)NULL, 10);
+
 				if (chunk < 0)
 					errx(EXIT_FAILURE, "process_command_http: Bad stream data");
 
@@ -812,7 +821,10 @@ parse_response_group(connector *connection, char **start, char **end)
 static int
 parse_response_item(connector *connection, char *end, int *count, char **item_start, char **item_end)
 {
-	int c = 0, has_entries = 0, ok = 1;
+	int c, has_entries, ok;
+
+	c = has_entries = 0;
+	ok = 1;
 
 	if (connection->protocol == SVN) {
 		if (*count == '\0') {
@@ -1043,8 +1055,8 @@ static void
 save_known_file_list(connector *connection, file_node **file, int file_count)
 {
 	struct tree_node  find, *found;
-	int  fd, x;
-	char revision[16];
+	int               fd, x;
+	char              revision[16];
 
 	if ((fd = open(connection->known_files_new, O_WRONLY | O_CREAT | O_TRUNC)) == -1)
 		err(EXIT_FAILURE, "write file failure %s", connection->known_files_new);
@@ -1097,7 +1109,7 @@ static void
 set_configuration_parameters(connector *connection, char *buffer, size_t length, const char *section)
 {
 	uint32_t  x;
-	char *bracketed_section, *item, *line;
+	char     *bracketed_section, *item, *line;
 
 	if ((bracketed_section = (char *)malloc(strlen(section) + 4)) == NULL)
 		err(EXIT_FAILURE, "set_configuration bracketed_section malloc");
@@ -1108,8 +1120,11 @@ set_configuration_parameters(connector *connection, char *buffer, size_t length,
 		item += strlen(bracketed_section);
 
 		while ((line = strsep(&item, "\n"))) {
-			if ((strlen(line) == 0) || (line[0] == '[')) break;
-			if (line[0] == '#') continue;
+			if ((strlen(line) == 0) || (line[0] == '['))
+				break;
+
+			if (line[0] == '#')
+				continue;
 
 			if (strstr(line, "host=") == line) {
 				line += 5;
@@ -1183,6 +1198,11 @@ set_configuration_parameters(connector *connection, char *buffer, size_t length,
 				connection->trim_tree = strtol(line + 10, (char **)NULL, 10);
 				continue;
 			}
+
+			if (strstr(line, "extra_files=") == line) {
+				connection->extra_files = strtol(line + 10, (char **)NULL, 10);
+				continue;
+			}
 		}
 	}
 
@@ -1232,7 +1252,7 @@ load_configuration(connector *connection, char *configuration_file, char *sectio
 /*
  * create_directory
  *
- * Procedure that checks and creates a local directory if possible. 
+ * Procedure that checks for and creates a local directory if possible. 
  */
 
 static void
@@ -1262,11 +1282,11 @@ process_report_svn(connector *connection, char *command, file_node ***file, int 
 {
 	file_node   *this_file;
 	struct stat  local;
-	int     buffers, *buffer_commands, count, path_exists, try, x;
-	size_t  d, length, name_length, path_length, path_source_length;
-	char  **buffer, *command_start, *directory_end, *directory_start, *end;
-	char   *item_end, *item_start, *marker, *name, next_command[BUFFER_UNIT];
-	char    path_source[MAXNAMLEN + 1], *start, *temp, temp_path[BUFFER_UNIT];
+	int          buffers, *buffer_commands, count, path_exists, try, x;
+	size_t       d, length, name_length, path_length, path_source_length;
+	char       **buffer, *command_start, *directory_end, *directory_start, *end;
+	char        *item_end, *item_start, *marker, *name, next_command[BUFFER_UNIT];
+	char         path_source[MAXNAMLEN + 1], *start, *temp, temp_path[BUFFER_UNIT];
 
 	try = buffers = -1;
 	buffer = NULL;
@@ -1302,7 +1322,7 @@ process_report_svn(connector *connection, char *command, file_node ***file, int 
 
 		/* Parse the response for file/directory names. */
 
-		end   = connection->response + connection->response_length;
+		end = connection->response + connection->response_length;
 		if (check_command_success(connection->protocol, &start, &end)) {
 			if (++try > 5)
 				errx(EXIT_FAILURE, "Error in svn stream.  Quitting.");
@@ -1453,7 +1473,8 @@ process_report_http(connector *connection, file_node ***file, int *file_count, i
 
 	revision_length = 1;
 	x = connection->revision;
-	while ((int)(x /= 10) > 0) revision_length++;
+	while ((int)(x /= 10) > 0)
+		revision_length++;
 
 	snprintf(command,
 		COMMAND_BUFFER,
@@ -1476,7 +1497,7 @@ process_report_http(connector *connection, file_node ***file, int *file_count, i
 		connection->root,
 		connection->address,
 		SVNUP_VERSION,
-		strlen(connection->branch) + revision_length + revision_length + 209,
+		strlen(connection->branch) + revision_length + revision_length + strlen(SVNUP_VERSION) + 206,
 		connection->branch,
 		connection->revision,
 		connection->revision);
@@ -1678,7 +1699,8 @@ get_files(connector *connection, char *command, char *path_target, file_node **f
 		first_response = 84;
 
 		x = connection->revision;
-		while ((int)(x /= 10) > 0) first_response++;
+		while ((int)(x /= 10) > 0)
+			first_response++;
 
 		for (x = file_start; x <= file_end; x++) {
 			if ((file[x] == NULL) || (file[x]->download == 0))
@@ -1689,7 +1711,8 @@ get_files(connector *connection, char *command, char *path_target, file_node **f
 				block_size_markers += 3;
 
 			file_block_remainder = file[x]->size % BUFFER_UNIT;
-			while ((int)(file_block_remainder /= 10) > 0) block_size_markers++;
+			while ((int)(file_block_remainder /= 10) > 0)
+				block_size_markers++;
 
 			file[x]->raw_size = file[x]->size +
 				first_response +
@@ -1758,7 +1781,7 @@ get_files(connector *connection, char *command, char *path_target, file_node **f
 		md5_check = MD5End(&md5_context, NULL);
 
 		if (connection->verbosity > 1)
-			printf("\r\e[2K\r");
+			printf("\r\e[0K\r");
 
 		if (connection->verbosity)
 			printf(" + %s\n", file_path_target);
@@ -1795,14 +1818,15 @@ static void
 progress_indicator(connector *connection, char *path, int f, int file_count)
 {
 	struct winsize window;
-	int   file_width, term_width, x;
-	char  *columns, file_path_target[BUFFER_UNIT], temp_buffer[BUFFER_UNIT];
+	int            file_width, term_width, x;
+	char          *columns, file_path_target[BUFFER_UNIT], temp_buffer[BUFFER_UNIT];
 
 	term_width = -1;
-
 	file_width = 2;
+
 	x = file_count;
-	while ((int)(x /= 10) > 0) file_width++;
+	while ((int)(x /= 10) > 0)
+		file_width++;
 
 	if (isatty(STDERR_FILENO)) {
 		if (((columns = getenv("COLUMNS")) != NULL) && (*columns != '\0'))
@@ -1825,7 +1849,7 @@ progress_indicator(connector *connection, char *path, int f, int file_count)
 
 	snprintf(temp_buffer,
 		BUFFER_UNIT,
-		"\e[2K% *d of %d (% 5.1f%%)  %s%s\r",
+		"% *d of %d (% 5.1f%%)  %s%s\e[0K\r",
 		file_width,
 		f + 1,
 		file_count,
@@ -1852,6 +1876,7 @@ usage(char *configuration_file)
 	fprintf(stderr, "    -4  Use IPv4 addresses only.\n");
 	fprintf(stderr, "    -6  Use IPv6 addresses only.\n");
 	fprintf(stderr, "    -b  Override the specified section's Subversion branch.\n");
+	fprintf(stderr, "    -f  Display the local files that do not exist in the repository.\n");
 	fprintf(stderr, "    -h  Override the specified section's hostname or IP address.\n");
 	fprintf(stderr, "    -l  Override the specified section's destination directory.\n");
 	fprintf(stderr, "    -n  Display the section's most recently downloaded revision number and exit.\n");
@@ -1889,7 +1914,7 @@ main(int argc, char **argv)
 	char **buffer, command[COMMAND_BUFFER + 1], *configuration_file, *end;
 	char  *md5, *path, *start, temp_buffer[BUFFER_UNIT], *value;
 	int    b, *buffer_commands, buffer_full, buffers, c, command_count, display_last_revision;
-	int    f, f0, fd, file_count, file_max, length, option, x;
+	int    f, f0, fd, file_count, file_max, length, option, x, port_override;
 
 	file = NULL;
 	buffers = -1;
@@ -1898,7 +1923,7 @@ main(int argc, char **argv)
 	new_buffer(&buffer, &buffer_commands, &buffers);
 
 	display_last_revision = file_count = command_count = 0;
-	buffer_full = f = f0 = length = 0;
+	buffer_full = f = f0 = length = port_override = 0;
 
 	configuration_file = strdup("/usr/local/etc/svnup.conf");
 
@@ -1918,7 +1943,7 @@ main(int argc, char **argv)
 	connection.ssl = NULL;
 	connection.ctx = NULL;
 	connection.socket_descriptor = connection.port = 0;
-	connection.trim_tree = connection.known_files_size = 0;
+	connection.trim_tree = connection.extra_files = connection.known_files_size = 0;
 	connection.verbosity = 1;
 	connection.family = AF_INET;
 	connection.protocol = HTTPS;
@@ -1940,7 +1965,7 @@ main(int argc, char **argv)
 		optind = 2;
 	}
 
-	while ((option = getopt(argc, argv, "46Vntb:h:l:o:p:r:v:")) != -1) {
+	while ((option = getopt(argc, argv, "46Vfntb:h:l:p:o:r:v:")) != -1) {
 		switch (option) {
 			case '4':
 				connection.family = AF_INET;
@@ -1952,6 +1977,9 @@ main(int argc, char **argv)
 				x = (optarg[0] == '/' ? 1 : 0);
 				connection.branch = (char *)malloc(strlen(optarg) - x + 1);
 				memcpy(connection.branch, optarg + x, strlen(optarg) - x + 1);
+				break;
+			case 'f':
+				connection.extra_files = 1;
 				break;
 			case 'h':
 				connection.address = strdup(optarg);
@@ -1965,16 +1993,26 @@ main(int argc, char **argv)
 				break;
 			case 'o':
 				connection.port = strtol(optarg, (char **)NULL, 10);
+				port_override = 1;
 				break;
 			case 'p':
-				if (strncasecmp(optarg, "svn", 3) == 0)
+				if (strncasecmp(optarg, "svn", 3) == 0) {
 					connection.protocol = SVN;
+					if (!port_override)
+						connection.port = 3690;
+				}
 
-				if (strncasecmp(optarg, "http", 4) == 0)
+				if (strncasecmp(optarg, "http", 4) == 0) {
 					connection.protocol = HTTP;
+					if (!port_override)
+						connection.port = 80;
+				}
 
-				if (strncasecmp(optarg, "https", 5) == 0)
+				if (strncasecmp(optarg, "https", 5) == 0) {
 					connection.protocol = HTTPS;
+					if (!port_override)
+						connection.port = 443;
+				}
 				break;
 			case 'r':
 				connection.revision = strtol(optarg, (char **)NULL, 10);
@@ -2030,6 +2068,7 @@ main(int argc, char **argv)
 
 	if (lstat(connection.known_files_old, &local) != -1) {
 		connection.known_files_size = local.st_size;
+
 		if ((connection.known_files = (char *)malloc(connection.known_files_size + 1)) == NULL)
 			err(EXIT_FAILURE, "main connection.known_files malloc");
 
@@ -2064,7 +2103,8 @@ main(int argc, char **argv)
 		}
 	}
 
-	find_local_files(connection.path_target, "");
+	if (connection.extra_files)
+		find_local_files(connection.path_target, "");
 
 	/* Initialize connection with the server and get the latest revision number. */
 
@@ -2081,10 +2121,11 @@ main(int argc, char **argv)
 
 		snprintf(command,
 			COMMAND_BUFFER,
-			"( 2 ( edit-pipeline svndiff1 absent-entries commit-revprops depth log-revprops atomic-revprops partial-replay ) %ld:svn://%s/%s 10:svnup-%s ( ) )\n",
+			"( 2 ( edit-pipeline svndiff1 absent-entries commit-revprops depth log-revprops atomic-revprops partial-replay ) %ld:svn://%s/%s %ld:svnup-%s ( ) )\n",
 			strlen(connection.address) + strlen(connection.branch) + 7,
 			connection.address,
 			connection.branch,
+			strlen(SVNUP_VERSION) + 6,
 			SVNUP_VERSION);
 
 		process_command_svn(&connection, command, 0);
@@ -2186,15 +2227,17 @@ main(int argc, char **argv)
 				break;
 			default:
 				fprintf(stderr, "unknown\n");
+				err(EXIT_FAILURE, "Unknown protocol.  Please specify one (http, https or svn).");
 				break;
 		}
 
-		fprintf(stderr, "# Address : %s\n", connection.address);
-		fprintf(stderr, "# Port    : %d\n", connection.port);
-		fprintf(stderr, "# Branch  : %s\n", connection.branch);
-		fprintf(stderr, "# Target  : %s\n", connection.path_target);
-		fprintf(stderr, "# TrimTree: %d\n", connection.trim_tree);
-		fprintf(stderr, "# WorkDir : %s\n", connection.path_work);
+		fprintf(stderr, "# Address: %s\n", connection.address);
+		fprintf(stderr, "# Port: %d\n", connection.port);
+		fprintf(stderr, "# Branch: %s\n", connection.branch);
+		fprintf(stderr, "# Target: %s\n", connection.path_target);
+		fprintf(stderr, "# Trim tree: %s\n", connection.trim_tree ? "Yes" : "No");
+		fprintf(stderr, "# Show extra files: %s\n", connection.extra_files ? "Yes" : "No");
+		fprintf(stderr, "# Work directory: %s\n", connection.path_work);
 	}
 
 	if (connection.protocol == SVN) {
@@ -2264,7 +2307,8 @@ main(int argc, char **argv)
 	/* Process the additional commands. */
 
 	for (f = f0 = b = 0; b <= buffers; b++) {
-		if (buffer_commands[b] == 0) break;
+		if (buffer_commands[b] == 0)
+			break;
 
 		connection.response_groups = buffer_commands[b] * 2;
 
@@ -2281,7 +2325,7 @@ main(int argc, char **argv)
 		connection.response_groups = 0;
 
 		for (length = 0, c = 0; c < buffer_commands[b]; c++) {
-			while ((f < file_count) && (file[f]->download == 0)) {
+			while ((connection.protocol >= HTTP) && (f < file_count) && (file[f]->download == 0)) {
 				if (connection.verbosity > 1)
 					progress_indicator(&connection, file[f]->path, f, file_count);
 
@@ -2375,21 +2419,21 @@ main(int argc, char **argv)
 		prune(&connection, data->path);
 		}
 
+	if (connection.verbosity > 1)
+		printf("\r\e[0K\r");
+
 	/* Print/prune any local files left. */
 
 	RB_FOREACH(data, tree2, &local_files) {
 		if (connection.trim_tree) {
 			prune(&connection, data->path);
 		} else {
-			if (connection.verbosity > 1)
+			if (connection.extra_files)
 				fprintf(stderr, " * %s%s\n", connection.path_target, data->path);
 		}
 	}
 
 	/* Wrap it all up. */
-
-	if (connection.verbosity > 1)
-		fprintf(stderr, "\n");
 
 	if (close(connection.socket_descriptor) != 0)
 		if (errno != EBADF)
