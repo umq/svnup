@@ -1,3 +1,14 @@
+svnup-0.73 - 2 June 2013
+	* Significantly improved performance when using the http/https protocol
+		to fetch incremental updates.
+	* Added a new command line and section option to allow a custom port
+		number to connect to.
+	* Added a new command line option to override the specified section's 
+		protocol.
+	* Added a new command line and section option to remove (trim) any files
+		found in the local copy that are not found in the repository.
+	* Fixed a display bug in the progress indicator.
+
 svnup-0.72 - 16 May 2013
 	* Fixed a bug with the -r command line option.
 	* Added a progress indicator to the output when the verbosity is > 1.

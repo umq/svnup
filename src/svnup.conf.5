@@ -45,18 +45,23 @@ and can be added to any section:
 .Bl -tag -width Fl
 .It Cm host
 The hostname/IP address of the Apache Subversion server.
+.It Cm port
+The custom port on the server to connect to.
 .It Cm protocol
 The protocol to use (currently supported protocols are 'http', 'https' or 'svn').
 .It Cm branch
 The repository branch to checkout.
 .It Cm target
 The local directory to store your copy of the repository.
+.It Cm trim_tree
+Controls what happens to any local files that do not appear in the repository.  1 = Remove all local files not found in the remote repository, 0 = leave local files alone.
 .It Cm verbosity
-How much of the transfer details to display.  0 = no output, 1 = show only names of the updated files/folders, 2 = also show more file information, 3 = also show commands sent to the server, 4 = also show svn response codes (useful when debugging).
+How much of the transfer details to display.  0 = no output, 1 = show only names of the updated files/folders, 2 = also show a progress indicator, 3 = also show commands sent to the server and svn response codes (useful when debugging).
+.El
 .Pp
 .Sh EXAMPLES
 With the following configuration options defined in
-
+.Nm
 .Pp
 [defaults]
 .br
@@ -76,7 +81,6 @@ branch=ports/head
 .br
 target=/usr/ports
 .br
-
 Executing:
 .Pp
 .Dl "svnup ports"
@@ -86,6 +90,7 @@ from the command line would result in a copy of the ports/head branch downloaded
 .Bl -tag -width "/usr/local/etc/svnup.conf"
 .It /usr/local/etc/svnup.conf
 Default location of the
+.El
 .Nm
 configuration file.
 .Sh SEE ALSO
